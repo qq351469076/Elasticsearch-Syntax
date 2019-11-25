@@ -233,6 +233,110 @@ def es_anaylizer_whitespace():
     pp(resp)
 
 
+def es_many_field():
+    """
+    mapping配置多字段定义
+    """
+    api_url = '/products'
+
+    data = {
+        'mappings': {
+            'properties': {
+                'company': {
+                    'type': 'text',
+                    'fields': {
+                        'keyword': {
+                            'type': 'keyword',
+                            'ignore_above': 256
+                        }
+                    }
+                },
+                'comment': {
+                    'type': 'text',
+                    'fields': {
+                        # 定义子字段
+                        'english_comment': {
+                            'type': 'text',
+                            'analyzer': 'english',
+                            'search_analyzer': 'english'
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    resp = put(base_url + api_url, headers=headers, data=dumps(data)).json()
+    pp(resp)
+
+
+def es_custom_analyizer():
+    """
+    mapping自定义analyzer
+    当Elasticsearch自带的分词器无法满足时, 可以自定义分词器, 通过自组合不同的组件实现
+
+    Excat values精确值, 包括数字 / 日期 / 具体一个字符串(例如 "Apple Store"), 精确值不需要做分词处理
+        Elasticsearch中的keyword
+    Full Text全文本, 非结构化的文本数据
+        Elasticsearch中的text
+    """
+    api_url = '/products'
+
+    # data = {
+    #     'settings': {
+    #         'analysis': {
+    #             'analyzer': {
+    #                 'my_english': {
+    #                     'type': 'english',
+    #                     'stem_exclusion': ['organization', 'organizations'],
+    #                     'stopwords': ['a', 'an', 'and', 'the', 'at']
+    #                 }
+    #             }
+    #         }
+    #     }
+    # }
+
+    data = {
+        'settings': {
+            'analysis': {
+                'analyzer': {
+                    # 给自定义分词器取名
+                    'my_custom_analyzer': {
+                        'type': 'custom',
+                        # 自定义char_filter
+                        'char_filter': ['emiticons'],
+                        # 自定义tokenizer
+                        'tokenizer': 'punctuation',
+                        'filter': ['lowercase', 'english_stop']  # 自定义filter
+                    }
+                },
+                'tokenizer': {
+                    'punctuation': {
+                        # 自带的类型
+                        'type': 'pattern',
+                        'pattern': '[ .,!?]'
+                    }
+                },
+                'char_filter': {
+                    'emiticons': {
+                        'type': 'mapping',
+                        'mappings': [':) => _happy_', ':( => _sad_']
+                    }
+                },
+                'filter': {
+                    'english_stop': {
+                        'type': 'stop',
+                        'stopwords': '_english_'
+                    }
+                }
+            }
+        }
+    }
+
+    resp = put(base_url + api_url, headers=headers, data=dumps(data)).json()
+    pp(resp)
+
+
 if __name__ == '__main__':
     headers = {
         "Content-Type": "application/json"
@@ -241,6 +345,7 @@ if __name__ == '__main__':
 
     # 类似sql方法, 对字段进行操作
     # es_concat()
+
     # 更新mapping dynamic
     # es_update_dynamic()
     # 修改mapping
@@ -249,6 +354,42 @@ if __name__ == '__main__':
     # es_update_null_value()
     # 查询多个字段, 在7.0版本之前是all
     # es_copy_to()
+    # mapping 多字段定义
+    # es_many_field()
+
+    # 配置自定义Analyizer
+    # 本函数针对products索引, 通过_analyzer=my_custom_alyzer来使用自定义分词器
+    es_custom_analyizer()
+    """
+    Character Filters
+    
+    在Tokenizer之前对文本进行处理, 例如增加删除及替换字符, 可以配置多个Character Filters, 会影响Tokenizer的position和offset信息
+    
+    一些自带的Character Filters
+        HTML strip - 去除html标签
+        Mapping - 字符串替换
+        Pattern replace - 正则匹配替换
+    """
+
+    """
+    Tokenizer
+    
+    将原始的文本按照一定的规则, 切分为词(term或者token)
+    
+    Elasticsearch内置的Tokenizers
+        whitespace / standard / uax_url_email / pattern / keyword(作为一个整体进行输出) / path hierarchy
+    
+    可以用Java开发插件, 实现自己的Tokenizer
+    """
+
+    """
+    Token Filters
+    
+    将Tokenizer输出的单词(term), 进行增加, 修改, 删除
+    
+    自带的Token Filters
+        Lowercase / stop / synonym(添加近义词)
+    """
     # 分词, 去除html标签
     # es_anaylizer_delete_html()
     # 分词, 进行替换
@@ -258,4 +399,4 @@ if __name__ == '__main__':
     # 分词, 区分路径
     # es_anaylizer_path()
     # 分词, 切分空格,过滤停用词
-    es_anaylizer_whitespace()
+    # es_anaylizer_whitespace()
