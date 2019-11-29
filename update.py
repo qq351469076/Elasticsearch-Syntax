@@ -9,7 +9,7 @@ def es_concat():
     我测试了一下, 中文字符串不可以
     数字型 可以   拼接字符串, 可以加减乘除
     """
-    api_url = '/keywords/_search'
+    api_url = "/keywords/_search"
 
     data = {
         "script_fields": {
@@ -33,7 +33,7 @@ def es_update_dynamic():
     """
     dynamic自动检测类型
 
-                     'true'      'false'     'strict'
+                     "true"      "false"     "strict"
     文档可被索引      yes         yes         no
     字段可别索引      yes         no          no
     Mapping别更新      yes         no          no
@@ -41,10 +41,75 @@ def es_update_dynamic():
     当dynamic被设置成false时候, 存在新增字段的数据写入, 该数据可以被索引, 但是新增字段会被丢弃
     当设置成Strict模式时候, 数据直接写入出错
     """
-    api_url = '/keywords/_mapping'
+    api_url = "/keywords/_mapping"
 
     data = {
-        'dynamic': 'true'
+        "dynamic": "true"
+    }
+
+    resp = put(base_url + api_url, headers=headers, data=dumps(data)).json()
+    pp(resp)
+
+
+def update_dynamic():
+    """
+    应用在具体的Index上, 根据Elasticsearch识别的数据类型, 结合字段名称, rule等来动态设定字段类型
+        所有的字符串类型都设定成Keyword, 或者关闭keyword字段
+        is开头的字段都设置成boolean
+        long_开头的都设置成long类型
+    """
+
+    # 只作用于某个Index上面
+    api_url = "/keywords"
+
+    # data = {
+    #     "mappings": {
+    #         # Dynamic模板是定义在某个Index的Mapping中
+    #         "dynamic_templates": [
+    #             {
+    #                 # Dynamic模板自定义名称
+    #                 "full_name": {
+    #                     # 字段包含name.*
+    #                     "path_match": "name.*",
+    #                     # 不包括.*middle
+    #                     "path_unmatch": "*.middle",
+    #                     "mapping": {
+    #                         # 都映射成text类型
+    #                         "type": "text",
+    #                         # 同时可以被full_name检索到
+    #                         "copy_to": "full_name"
+    #                     }
+    #                 }
+    #             }
+    #         ]
+    #     }
+    # }
+
+    data = {
+        "mappings": {
+            "dynamic_templates": [
+                {
+                    "strings_as_boolean": {
+                        # 首先匹配到string类型
+                        "match_mapping_type": "string",
+                        # 然后匹配is*字段
+                        "match": "is*",
+                        # 映射成boolean类型
+                        "mapping": {
+                            "type": "boolean"
+                        }
+                    },
+                    "strings_as_keywords": {
+                        # 匹配到string类型
+                        "match_mapping_type": "string",
+                        "mapping": {
+                            # 映射成keyword类型
+                            "type": "keyword"
+                        }
+                    }
+                }
+            ]
+        }
     }
 
     resp = put(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -55,22 +120,22 @@ def es_update_mapping():
     """
     mapping有点类似mysql的表定义概念, 但还不是意义上的表概念, 稍微有点区别
     """
-    api_url = '/keywords'
+    api_url = "/keywords"
 
     data = {
         "mappings": {
-            'properties': {
-                '关键词': {
-                    'type': 'text',
-                    # 'index': 'false'
+            "properties": {
+                "关键词": {
+                    "type": "text",
+                    # "index": "false"
                 },
-                '竞争指数': {
-                    'type': 'text',
+                "竞争指数": {
+                    "type": "text",
 
                     # 控制当前字段是否被索引, 默认为true, 如果设置成false 该字段不可被索引
                     # 比如不希望手机号被人搜索到
                     # 不能被索引, 也会节省许多开销, 倒排索引就不会被创建
-                    # 'index': 'false',
+                    # "index": "false",
 
                     # 四种不同级别的配置, 可以控制倒排索引记录的内容
                     #   docs - 记录doc id
@@ -79,7 +144,7 @@ def es_update_mapping():
                     #   offsets - 记录doc id / term frequencies / term position / character offsets
                     # Text类型的默认记录positions, 其他默认为docs
                     # 记录的内容越多 占用空间存储越大
-                    'index_options': 'positions'  # 有此选项, index用不了
+                    "index_options": "positions"  # 有此选项, index用不了
                 }
             }
         }
@@ -94,16 +159,16 @@ def es_update_null_value():
     需要对Null值进行搜索
     插入某些文档字段的值为Null, 后续还要针对Null值进行搜索
 
-    查询的时候value应该被设置成'NULL'才可以被索引
+    查询的时候value应该被设置成"NULL"才可以被索引
     """
-    api_url = '/keywords'
+    api_url = "/keywords"
 
     data = {
         "mappings": {
-            'properties': {
-                '关键词': {
-                    'type': 'keyword',
-                    'null_value': 'NULL'
+            "properties": {
+                "关键词": {
+                    "type": "keyword",
+                    "null_value": "NULL"
                 }
             }
         }
@@ -119,18 +184,18 @@ def es_copy_to():
     不会出现在_source找那个
     满足特定的搜索需求
     """
-    api_url = '/keywords'
+    api_url = "/keywords"
 
     data = {
         "mappings": {
-            'properties': {
-                '关键词': {
-                    'type': 'keyword',
-                    'copy_to': 'fullName'
+            "properties": {
+                "关键词": {
+                    "type": "keyword",
+                    "copy_to": "fullName"
                 },
-                '测试字段': {
-                    'type': 'keyword',
-                    'copy_to': 'fullName'
+                "测试字段": {
+                    "type": "keyword",
+                    "copy_to": "fullName"
                 }
             }
         }
@@ -144,12 +209,12 @@ def es_anaylizer_delete_html():
     """
     分词, 去掉html标签
     """
-    api_url = '/_analyze'
+    api_url = "/_analyze"
 
     data = {
-        'tokenizer': 'keyword',
-        'char_filter': ['html_strip'],
-        'text': '<b>hello world</b>'
+        "tokenizer": "keyword",
+        "char_filter": ["html_strip"],
+        "text": "<b>hello world</b>"
     }
 
     resp = post(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -160,18 +225,18 @@ def es_anaylizer_replace_str():
     """
     分词, 把 "-" 替换成 "_"
     """
-    api_url = '/_analyze'
+    api_url = "/_analyze"
 
     data = {
-        'tokenizer': 'standard',
-        'char_filter': [
+        "tokenizer": "standard",
+        "char_filter": [
             {
-                'type': 'mapping',
-                'mappings': ['- => _', ':) => happy']
+                "type": "mapping",
+                "mappings": ["- => _", ":) => happy"]
             }
         ],
         # 替换表情符号
-        'text': '123-456, I-test! test-990 650-555-1234! i am very :)'
+        "text": "123-456, I-test! test-990 650-555-1234! i am very :)"
     }
 
     resp = post(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -182,18 +247,18 @@ def es_anaylizer_re():
     """
     分词, 正则匹配
     """
-    api_url = '/_analyze'
+    api_url = "/_analyze"
 
     data = {
-        'tokenizer': 'standard',
-        'char_filter': [
+        "tokenizer": "standard",
+        "char_filter": [
             {
-                'type': 'pattern_replace',
-                'pattern': 'http://(.*)',
-                'replacement': '$1'
+                "type": "pattern_replace",
+                "pattern": "http://(.*)",
+                "replacement": "$1"
             }
         ],
-        'text': 'http://elastic.co'
+        "text": "http://elastic.co"
     }
 
     resp = post(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -204,11 +269,11 @@ def es_anaylizer_path():
     """
     分词, 区分目录
     """
-    api_url = '/_analyze'
+    api_url = "/_analyze"
 
     data = {
-        'tokenizer': 'path_hierarchy',
-        'text': '/user/ymruan/a/b/c/d/e'
+        "tokenizer": "path_hierarchy",
+        "text": "/user/ymruan/a/b/c/d/e"
     }
 
     resp = post(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -219,12 +284,12 @@ def es_anaylizer_whitespace():
     """
     分词, 切分空格, 过滤stop停用词
     """
-    api_url = '/_analyze'
+    api_url = "/_analyze"
 
     data = {
-        'tokenizer': 'whitespace',
-        'filter': ['lowercase', 'stop'],
-        'text': ['The rain in Spain falls mainly on the plain.']
+        "tokenizer": "whitespace",
+        "filter": ["lowercase", "stop"],
+        "text": ["The rain in Spain falls mainly on the plain."]
     }
 
     resp = get(base_url + api_url, headers=headers, data=dumps(data)).json()
@@ -237,28 +302,28 @@ def es_many_field():
     """
     mapping配置多字段定义
     """
-    api_url = '/products'
+    api_url = "/products"
 
     data = {
-        'mappings': {
-            'properties': {
-                'company': {
-                    'type': 'text',
-                    'fields': {
-                        'keyword': {
-                            'type': 'keyword',
-                            'ignore_above': 256
+        "mappings": {
+            "properties": {
+                "company": {
+                    "type": "text",
+                    "fields": {
+                        "keyword": {
+                            "type": "keyword",
+                            "ignore_above": 256
                         }
                     }
                 },
-                'comment': {
-                    'type': 'text',
-                    'fields': {
+                "comment": {
+                    "type": "text",
+                    "fields": {
                         # 定义子字段
-                        'english_comment': {
-                            'type': 'text',
-                            'analyzer': 'english',
-                            'search_analyzer': 'english'
+                        "english_comment": {
+                            "type": "text",
+                            "analyzer": "english",
+                            "search_analyzer": "english"
                         }
                     }
                 }
@@ -280,16 +345,16 @@ def es_custom_analyizer():
     Full Text全文本, 非结构化的文本数据
         Elasticsearch中的text
     """
-    api_url = '/products'
+    api_url = "/products"
 
     # data = {
-    #     'settings': {
-    #         'analysis': {
-    #             'analyzer': {
-    #                 'my_english': {
-    #                     'type': 'english',
-    #                     'stem_exclusion': ['organization', 'organizations'],
-    #                     'stopwords': ['a', 'an', 'and', 'the', 'at']
+    #     "settings": {
+    #         "analysis": {
+    #             "analyzer": {
+    #                 "my_english": {
+    #                     "type": "english",
+    #                     "stem_exclusion": ["organization", "organizations"],
+    #                     "stopwords": ["a", "an", "and", "the", "at"]
     #                 }
     #             }
     #         }
@@ -297,36 +362,36 @@ def es_custom_analyizer():
     # }
 
     data = {
-        'settings': {
-            'analysis': {
-                'analyzer': {
+        "settings": {
+            "analysis": {
+                "analyzer": {
                     # 给自定义分词器取名
-                    'my_custom_analyzer': {
-                        'type': 'custom',
+                    "my_custom_analyzer": {
+                        "type": "custom",
                         # 自定义char_filter
-                        'char_filter': ['emiticons'],
+                        "char_filter": ["emiticons"],
                         # 自定义tokenizer
-                        'tokenizer': 'punctuation',
-                        'filter': ['lowercase', 'english_stop']  # 自定义filter
+                        "tokenizer": "punctuation",
+                        "filter": ["lowercase", "english_stop"]  # 自定义filter
                     }
                 },
-                'tokenizer': {
-                    'punctuation': {
+                "tokenizer": {
+                    "punctuation": {
                         # 自带的类型
-                        'type': 'pattern',
-                        'pattern': '[ .,!?]'
+                        "type": "pattern",
+                        "pattern": "[ .,!?]"
                     }
                 },
-                'char_filter': {
-                    'emiticons': {
-                        'type': 'mapping',
-                        'mappings': [':) => _happy_', ':( => _sad_']
+                "char_filter": {
+                    "emiticons": {
+                        "type": "mapping",
+                        "mappings": [":) => _happy_", ":( => _sad_"]
                     }
                 },
-                'filter': {
-                    'english_stop': {
-                        'type': 'stop',
-                        'stopwords': '_english_'
+                "filter": {
+                    "english_stop": {
+                        "type": "stop",
+                        "stopwords": "_english_"
                     }
                 }
             }
@@ -337,17 +402,57 @@ def es_custom_analyizer():
     pp(resp)
 
 
-if __name__ == '__main__':
+def es_create_index_template():
+    """
+    帮助设定Mappings和Settings, 并按照一定的规则, 自动匹配到新创建的索引上
+    可以设定多个索引模板, 这些设置会被'merge'在一起
+    可以指定'order'数值, 控制'merging'的过程
+
+    当一个Index被新创建时
+        应用Elasticsearch默认的settings和mappings
+        应用order数值低的Index模板中的设定
+        应用order数值高的Index模板中的设定, 之前的设定会被覆盖
+        应用创建Index时, 用户所指定的Settings和Mappings, 并覆盖之前模板中的设定
+    """
+
+    # 定义模板的名称
+    api_url = '/_template/template_default'
+
+    data = {
+        # 所有Index均采用此模板
+        "index_patterns": ["*"],
+        "order": 0,
+        "version": 1,
+        "settings": {
+            # 控制副本的分区数量和副本数量
+            "number_of_shards": 1,
+            "number_of_replicas": 1
+        },
+        "mappings": {
+            # 关闭 日期类型自动识别, "type"会变成"text"
+            "date_detection": 'false',
+            # 开启 数字类型自动识别
+            "numeric_detection": 'true'
+        }
+    }
+    resp = put(base_url + api_url, headers=headers, json=data).json()
+    pp(resp)
+
+
+if __name__ == "__main__":
     headers = {
         "Content-Type": "application/json"
     }
-    base_url = 'http://localhost:9200'
+    base_url = "http://localhost:9200"
 
     # 类似sql方法, 对字段进行操作
     # es_concat()
 
     # 更新mapping dynamic
     # es_update_dynamic()
+    # 修改Dynamic模板
+    update_dynamic()
+
     # 修改mapping
     # es_update_mapping()
     # 修改null值, 为后续查找做准备
@@ -359,7 +464,7 @@ if __name__ == '__main__':
 
     # 配置自定义Analyizer
     # 本函数针对products索引, 通过_analyzer=my_custom_alyzer来使用自定义分词器
-    es_custom_analyizer()
+    # es_custom_analyizer()
     """
     Character Filters
     
@@ -400,3 +505,6 @@ if __name__ == '__main__':
     # es_anaylizer_path()
     # 分词, 切分空格,过滤停用词
     # es_anaylizer_whitespace()
+
+    # 创建Index模板
+    es_create_index_template()
