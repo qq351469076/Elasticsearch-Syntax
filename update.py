@@ -3,6 +3,20 @@ from pprint import pprint as pp
 from ujson import dumps
 
 
+def update_index():
+    """
+    update不会删除原来的文档, 而是真正实现数据更新
+    :return:
+    """
+    data = {
+        "doc": {
+            "name": '奥特曼'
+        }
+    }
+    resp = post(base_url + '/hhhh/_update/1/', json=data, headers=headers).json()
+    pp(resp)
+
+
 def es_concat():
     """
     在某个字段上做操作, 类似MySQL的一些方法
@@ -402,69 +416,26 @@ def es_custom_analyizer():
     pp(resp)
 
 
-def es_create_index_template():
-    """
-    帮助设定Mappings和Settings, 并按照一定的规则, 自动匹配到新创建的索引上
-    可以设定多个索引模板, 这些设置会被'merge'在一起
-    可以指定'order'数值, 控制'merging'的过程
-
-    当一个Index被新创建时
-        应用Elasticsearch默认的settings和mappings
-        应用order数值低的Index模板中的设定
-        应用order数值高的Index模板中的设定, 之前的设定会被覆盖
-        应用创建Index时, 用户所指定的Settings和Mappings, 并覆盖之前模板中的设定
-    """
-
-    # 定义模板的名称
-    api_url = '/_template/template_default'
-
-    data = {
-        # 所有Index均采用此模板
-        "index_patterns": ["*"],
-        "order": 0,
-        "version": 1,
-        "settings": {
-            # 控制副本的分区数量和副本数量
-            "number_of_shards": 1,
-            "number_of_replicas": 1
-        },
-        "mappings": {
-            # 关闭 日期类型自动识别, "type"会变成"text"
-            "date_detection": 'false',
-            # 开启 数字类型自动识别
-            "numeric_detection": 'true'
-        }
-    }
-    resp = put(base_url + api_url, headers=headers, json=data).json()
-    pp(resp)
-
-
 if __name__ == "__main__":
     headers = {
         "Content-Type": "application/json"
     }
     base_url = "http://localhost:9200"
 
-    # 类似sql方法, 对字段进行操作
-    # es_concat()
+    # update_index()  # 更新Index里面一条文档
 
-    # 更新mapping dynamic
-    # es_update_dynamic()
-    # 修改Dynamic模板
-    update_dynamic()
+    # es_concat()  # 类似sql方法, 对字段进行操作, 拼出一个新字段
 
-    # 修改mapping
-    # es_update_mapping()
-    # 修改null值, 为后续查找做准备
-    # es_update_null_value()
-    # 查询多个字段, 在7.0版本之前是all
-    # es_copy_to()
-    # mapping 多字段定义
-    # es_many_field()
+    # es_update_dynamic()  # 更新mapping dynamic, 自动识别字段类型
+    # update_dynamic()  # 修改Dynamic模板
+    # es_update_mapping()  # 修改mapping
+
+    # es_update_null_value()  # 修改null值, 为后续查找做准备
+    # es_copy_to()  # 查询多个字段, 在7.0版本之前是all
+    # es_many_field()  # mapping 多字段定义
 
     # 配置自定义Analyizer
-    # 本函数针对products索引, 通过_analyzer=my_custom_alyzer来使用自定义分词器
-    # es_custom_analyizer()
+    # es_custom_analyizer()  # 本函数针对products索引, 通过_analyzer=my_custom_alyzer来使用自定义分词器
     """
     Character Filters
     
@@ -495,16 +466,9 @@ if __name__ == "__main__":
     自带的Token Filters
         Lowercase / stop / synonym(添加近义词)
     """
-    # 分词, 去除html标签
-    # es_anaylizer_delete_html()
-    # 分词, 进行替换
-    # es_anaylizer_replace_str()
-    # 分词, 正则匹配
-    # es_anaylizer_re()
-    # 分词, 区分路径
-    # es_anaylizer_path()
-    # 分词, 切分空格,过滤停用词
-    # es_anaylizer_whitespace()
 
-    # 创建Index模板
-    es_create_index_template()
+    # es_anaylizer_delete_html()  # 分词, 去除html标签
+    # es_anaylizer_replace_str()  # 分词, 进行替换
+    # es_anaylizer_re()  # 分词, 正则匹配
+    # es_anaylizer_path()  # 分词, 区分路径
+    # es_anaylizer_whitespace()  # 分词, 切分空格,过滤停用词
