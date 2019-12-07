@@ -399,11 +399,12 @@ def difficult_query():
     Filter可以有效利用缓存
     """
     data = {
+        # 查看是如何进行打分的, 26节有讲
         "explain": 'true',
         "query": {
             "constant_score": {
                 "filter": {
-                    # Term是表达语意的最小单位, 搜索和利用统计语言语言模型进行自然语言处理都需要处理Tem
+                    # Term是表达语意的最小单位, 搜索和利用统计语言语言模型进行自然语言处理都需要处理Term
                     # 在ES中, Term查询, 对input不做分词, 会将input作为一个整体, 在倒排索引中查找准确的词项,
                     # 并且使用相关度算分公式为每个包含该词项的文档进行相关度算分 - 例如"App Store"
                     # 通过constant_score将查询转成一个Filtering, 避免算分, 并利用缓存, 提高性能
@@ -480,6 +481,60 @@ def exist_query():
     pp(resp)
 
 
+def bool_query():
+    """
+    Query Content会对相关性进行算分, 而Filter Content不需要算分, 可以利用Cache, 获得更好的性能
+
+    一个bool查询, 是一个或者多个子查询子句的组合
+        总共包括4种子句, 其中2种会影响算分, 2种不影响算分
+
+    匹配的子句越多, 相关性评分越高, 如果多条查询子句被合并为一条复合查询语句, 比如bool查询,
+    则每个查询子句计算得出的评分会被合并到总的相关性评分中
+    -------------------------------------
+        must              必须匹配, 贡献算分
+        should            选择性匹配, 贡献算分
+        must_not          Filter Content, 查询子句, 必须不能匹配, 不贡献算分
+        filter            Filter Content, 必须匹配, 不贡献算分
+    """
+    data = {
+        "query": {
+            "bool": {
+                "must": {
+                    "term": {
+                        # price的价格必须是30元
+                        "price": 30
+                    }
+                },
+                "filter": {
+                    "term": {
+                        # 过滤avaliable是true
+                        "avaliable": "true"
+                    }
+                },
+                "must_not": {
+                    "range": {
+                        "price": {
+                            # 数值查询, 不能大于30元
+                            "lte": 30
+                        }
+                    }
+                },
+                "should": [
+                    {
+                        "term": {
+                            # avaliable的精确值应该是test1
+                            "avaliable.keyword": "test1"
+                        }
+                    }
+                ],
+                "minimum_should_match": 1
+            }
+        }
+    }
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
 if __name__ == "__main__":
     headers = {
         "Content-Type": "application/json"
@@ -529,8 +584,12 @@ if __name__ == "__main__":
     # es_use_fileds_selcet()  # match查询, 指定一个字段查询, 同上上的另外一种写法
     # simple_query_string_query()  # match查询, 简单查询语法, 用得少
     # es_use_many_fileds_selcet()  # match查询, 指定多个字段查询, 查询相同的结果
-    # find_many_field()  # match查询, 查询不同字段的不同值
-    difficult_query()  # term查询, 复合型查询 Constant Score转为Filter, 去掉相关性算分
+    find_many_field()  # match查询, 查询不同字段的不同值
+    """
+    Query Content会对相关性进行算分, 而Filter Content不需要算分, 可以利用Cache, 获得更好的性能
+    """
+    # difficult_query()  # term查询, 复合型查询 Constant Score转为Filter, 去掉相关性算分
+    bool_query()
     # range_query()  # 数值范围查询, 不进行打分
     # date_query()  # 日期范围查询, 不进行打分
     # exist_query()  # 查询包含某字段的文档, 同时不进行打分
