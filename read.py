@@ -408,7 +408,9 @@ def difficult_query():
                     # 在ES中, Term查询, 对input不做分词, 会将input作为一个整体, 在倒排索引中查找准确的词项,
                     # 并且使用相关度算分公式为每个包含该词项的文档进行相关度算分 - 例如"App Store"
                     # 通过constant_score将查询转成一个Filtering, 避免算分, 并利用缓存, 提高性能
+
                     # term要查询的字段, 如果是多值字段, 也会出现在结果里, 因为term的查询是包含, 而不是等于
+                    # 如果是多值字段, 在索引的时候, 需要在索引的时候针对多值字段出现的次数进行计数, 且必须用bool查询的must查询多值
                     "term": {
                         # 词 必须要 精准 才能准确命中, 同时对字段.keyword进行精确取值
                         "keyword.keyword": "糖"
@@ -488,11 +490,14 @@ def bool_query():
     一个bool查询, 是一个或者多个子查询子句的组合
         总共包括4种子句, 其中2种会影响算分, 2种不影响算分
 
+    bool查询可以嵌套, 查询语句的结构, 会对相关度算分产生影响
+        同一级下的竞争字段, 具有相同的权重
+
     匹配的子句越多, 相关性评分越高, 如果多条查询子句被合并为一条复合查询语句, 比如bool查询,
     则每个查询子句计算得出的评分会被合并到总的相关性评分中
     -------------------------------------
         must              必须匹配, 贡献算分
-        should            选择性匹配, 贡献算分
+        should            选择性匹配, 贡献算分, 如果bool查询中没有must条件, should中必须满足一条查询
         must_not          Filter Content, 查询子句, 必须不能匹配, 不贡献算分
         filter            Filter Content, 必须匹配, 不贡献算分
     """
@@ -514,20 +519,93 @@ def bool_query():
                 "must_not": {
                     "range": {
                         "price": {
-                            # 数值查询, 不能大于30元
+                            # 数值查询, 不能低于30元
                             "lte": 30
                         }
                     }
                 },
+                # 多选
                 "should": [
                     {
                         "term": {
                             # avaliable的精确值应该是test1
                             "avaliable.keyword": "test1"
                         }
+                    },
+                    {
+                        "term": {
+                            # avaliable的精确值应该是test1
+                            "avaliable.keyword": "test2"
+                        }
                     }
                 ],
                 "minimum_should_match": 1
+            }
+        }
+    }
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
+def boost_query():
+    """
+    Boosting是控制相关度的一种手段
+
+    举个例子, 多字段有差不多相同的字段, 则优先把相关度高的放在前面
+
+    参数boost的含义
+        当 boost > 1时, 打分的相关度相对性提升
+        当 0 < boost < 1时, 打分的权重相对性降低
+        当 boost < 0时, 贡献负分
+    """
+    data = {
+        "query": {
+            "bool": {
+                "should": [
+                    {
+                        "match": {
+                            "keyword": {
+                                "query": "糖",
+                                # 控制相关度
+                                "boost": 3
+                            }
+                        }
+                    },
+                    {
+                        "match": {
+                            "keyword": {
+                                "query": "糖果",
+                                "boost": 1
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    }
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
+def low_weight_query():
+    """
+    低权重查询
+    举个例子, 文档中有"电子apple"和"apple果汁", 想查询"电子apple", 同时又想把不相关的"苹果果汁"带上, 放到最后
+    """
+    data = {
+        "query": {
+            "boosting": {
+                "positive": {
+                    "match": {
+                        "keyword": "apple"
+                    }
+                },
+                "negative": {
+                    "match": {
+                        "keyword": "pie"
+                    }
+                },
+                "negative_boost": 0.5
             }
         }
     }
@@ -584,12 +662,15 @@ if __name__ == "__main__":
     # es_use_fileds_selcet()  # match查询, 指定一个字段查询, 同上上的另外一种写法
     # simple_query_string_query()  # match查询, 简单查询语法, 用得少
     # es_use_many_fileds_selcet()  # match查询, 指定多个字段查询, 查询相同的结果
-    find_many_field()  # match查询, 查询不同字段的不同值
+    # find_many_field()  # match查询, 查询不同字段的不同值
     """
     Query Content会对相关性进行算分, 而Filter Content不需要算分, 可以利用Cache, 获得更好的性能
     """
     # difficult_query()  # term查询, 复合型查询 Constant Score转为Filter, 去掉相关性算分
-    bool_query()
+    # bool_query()    # 布尔查询, 可以多条件查询
+    # boost_query()  # 控制相关度查询
+    low_weight_query()  # 低权重查询
+
     # range_query()  # 数值范围查询, 不进行打分
     # date_query()  # 日期范围查询, 不进行打分
     # exist_query()  # 查询包含某字段的文档, 同时不进行打分
