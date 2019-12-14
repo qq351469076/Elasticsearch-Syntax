@@ -498,6 +498,7 @@ def bool_query():
     -------------------------------------
         must              必须匹配, 贡献算分
         should            选择性匹配, 贡献算分, 如果bool查询中没有must条件, should中必须满足一条查询
+            should会对里面的语句都进行算分, 针对这里面的结果评分做一个相加, 然后做平均化的处理
         must_not          Filter Content, 查询子句, 必须不能匹配, 不贡献算分
         filter            Filter Content, 必须匹配, 不贡献算分
     """
@@ -613,6 +614,298 @@ def low_weight_query():
     pp(resp)
 
 
+def disjunction_max_query():
+    """
+    should会对里面的语句都进行算分, 针对这里面所有的结果评分做一个相加, 然后做平均化的处理
+
+    此结构里, keyword和category有一定关系, 但是是属于竞争的关系, 我们不应该将分数简单叠加, 而是找到单个最佳匹配的字段的评分
+
+    Disjunction Max Query, 同Best Fields默认类型, 不用指定
+        将任何与任意查询匹配的文档作为结果返回, 采用字段上最匹配的评分最终评分返回
+    """
+
+    # data = {
+    #     "query": {
+    #         "bool": {
+    #             "should": [
+    #                 {
+    #                     "match": {
+    #                         "keyword": "软糖"
+    #                     }
+    #                 },
+    #                 {
+    #                     "match": {
+    #                         "category": "软糖"
+    #                     }
+    #                 }
+    #             ]
+    #         }
+    #     }
+    # }
+
+    data = {
+        "query": {
+            "dis_max": {
+                "queries": [
+                    {
+                        "match": {
+                            "keyword": "软糖"
+                        }
+                    },
+                    {
+                        "match": {
+                            "category": "软糖"
+                        }
+                    }
+                ],
+                # 通过Tie Breaker参数调整
+                #   1. 获得最佳匹配语句的评分_score
+                #   2. 将其他匹配语句的评分与tie_breaker相乘
+                #   3. 对以上评分求和并规范化
+                "tie_breaker": 0.2
+            }
+        }
+    }
+
+    # data = {
+    #     "query": {
+    #         "multi_match": {
+    #             "type": "best_fields",
+    #             "query": "Quick pets",
+    #             "fields": [
+    #                 "title",
+    #                 "body"
+    #             ],
+    #             "tie_breaker": 0.2,
+    #             "minimum_should_match": "20%"
+    #         }
+    #     }
+    # }
+
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
+def most_fields_query():
+    """
+    无法做Operator操作
+
+    此操作与disjunction_max_query方法相反, 匹配到肉眼觉得正确的词, 本质是通过增加一个子字段来累加相关度
+    用广度匹配字段title包括尽可能多的文档--以提高召回率---同时又使用字段title.std作为信号将相关度更高的文档置于结果顶部
+
+    每个字段对于最终评分的贡献可以通过自定义值boost来控制, 比如, 使title字段更为重要, 这样同时也降低了其他信号字段的作用
+
+    """
+
+    # data = {
+    #     "mappings": {
+    #         "properties": {
+    #             "title": {
+    #                 "type": "text",
+    #                 "analyzer": "english",
+    #                 # 子字段并不会对词干进行提取, 控制搜索条件的精度
+    #                 "fields": {
+    #                     "std": {
+    #                         "type": "text",
+    #                         "analyzer": "standard"
+    #                     }
+    #                 }
+    #             }
+    #         }
+    #     }
+    # }
+
+    data = {
+        "query": {
+            "multi_match": {
+                "query": "barking dogs",
+                "type": "most_fields",
+                "fields": [
+                    # 提高权重
+                    "title^10",
+                    "title.std"
+                ]
+            }
+        }
+    }
+
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
+def cross_query():
+    """
+    可以通过copy_to解决, 但是需要额外的存储空间, 此操作的优势是可以在搜索时为单个字段提升权重
+
+    可以用most_fields, 但是无法使用Operator
+    """
+
+    data = {
+        "query": {
+            "multi_match": {
+                # 这三个词
+                "query": "Poland Street W1V",
+                "type": "cross_fields",
+                # 必须同时
+                "operator": "and",
+                # 出现在这三个字段当中
+                "fields": [
+                    "street",
+                    "city",
+                    "country",
+                    "postcode"
+                ]
+            }
+        }
+    }
+
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
+def function_score_query():
+    """
+    可以在查询结束后, 对每一个匹配的文档进行一系列的重新算分, 根据新生成的分数进行排序
+    提供了集中默认的计算分值的函数
+        Weight: 为每一个文档设置一个简单而不被规范化的权重
+            新的算分 = 老的算分 * 投票数(votes)
+        Field Value Factor: 使用该数值来修改_score, 例如将"热度"和"点赞数"作为算分的参考因素
+        Random Score: 为每一个用户使用一个不同的, 随机算分结果
+        衰减函数: 以某个字段的值为标准, 距离某个值越近, 得分越高
+        Script Score: 自定义脚本完全控制所需逻辑
+    """
+
+    # Weight提升权重, 在这个搜索中在继续按照投票数进行额外算分
+    # data = {
+    #     "query": {
+    #         "function_score": {
+    #             "query": {
+    #                 "multi_match": {
+    #                     "query": "popularity",
+    #                     "fields": [
+    #                         "title",
+    #                         "content"
+    #                     ]
+    #                 }
+    #             },
+    #             "field_value_factor": {
+    #                 "field": "votes"
+    #             }
+    #         }
+    #     }
+    # }
+
+    # 如果投票数有些是0, 有些是100000, 这样_score悬殊就大了, 通过log让数字平滑处理
+    # data = {
+    #     "query": {
+    #         "function_score": {
+    #             "query": {
+    #                 "multi_match": {
+    #                     "query": "popularity",
+    #                     "fields": [
+    #                         "title",
+    #                         "content"
+    #                     ]
+    #                 }
+    #             },
+    #             "field_value_factor": {
+    #                 "field": "votes",
+    #                 # 通过api进行平滑处理
+    #                 "modifier": "log1p"
+    #             }
+    #         }
+    #     }
+    # }
+
+    # 引入Factor, 新的算分 * log(1 + factor * 投票数)
+    # data = {
+    #     "query": {
+    #         "function_score": {
+    #             "query": {
+    #                 "multi_match": {
+    #                     "query": "popularity",
+    #                     "fields": [
+    #                         "title",
+    #                         "content"
+    #                     ]
+    #                 }
+    #             },
+    #             "field_value_factor": {
+    #                 "field": "votes",
+    #                 "modifier": "log1p",
+    #                 "factor": 0.1
+    #             }
+    #         }
+    #     }
+    # }
+
+    # 还可以采用不同的Boost Mode来计算新的算分, 默认值是Multiply(算分与函数值的成绩)
+    #   Sum: 算分与函数的和
+    #   Min / Max: 算分与函数取 最小/最大值
+    #   Replace: 使用函数值取代算分
+    # data = {
+    #     "query": {
+    #         "function_score": {
+    #             "query": {
+    #                 "multi_match": {
+    #                     "query": "popularity",
+    #                     "fields": [
+    #                         "title",
+    #                         "content"
+    #                     ]
+    #                 }
+    #             },
+    #             "field_value_factor": {
+    #                 "field": "votes",
+    #                 "modifier": "log1p",
+    #                 "factor": 0.1
+    #             },
+    #             # 使用Boost Mode
+    #             "boost_mode": "sum"
+    #         }
+    #     }
+    # }
+
+    # 可以用MAX Boost将算分控制在一个最大值
+    data = {
+        "query": {
+            "function_score": {
+                "query": {
+                    "multi_match": {
+                        "query": "popularity",
+                        "fields": [
+                            "title",
+                            "content"
+                        ]
+                    }
+                },
+                "field_value_factor": {
+                    "field": "votes",
+                    "modifier": "log1p",
+                    "factor": 0.1
+                },
+                "boost_mode": "sum",
+                # 使用Max Boost将算分控制在一个最大值
+                "max_boost": 3
+            }
+        }
+    }
+
+    # 一致性随机函数, 同一个seed下得分是一样, 不同seed不同得分
+    data = {
+        "query": {
+            "function_score": {
+                "random_score": {
+                    "seed": 314159265359
+                }
+            }
+        }
+    }
+
+    resp = get(base_url + '/keywords/_search', headers=headers, json=data).json()
+    pp(resp)
+
+
 if __name__ == "__main__":
     headers = {
         "Content-Type": "application/json"
@@ -667,9 +960,12 @@ if __name__ == "__main__":
     Query Content会对相关性进行算分, 而Filter Content不需要算分, 可以利用Cache, 获得更好的性能
     """
     # difficult_query()  # term查询, 复合型查询 Constant Score转为Filter, 去掉相关性算分
-    # bool_query()    # 布尔查询, 可以多条件查询
+    # bool_query()  # 布尔查询, 可以多条件查询
     # boost_query()  # 控制相关度查询
-    low_weight_query()  # 低权重查询
+    # low_weight_query()  # 低权重查询
+    # disjunction_max_query()  # 单字符串多字段查询
+    # cross_query()  # 跨字段搜索
+    function_score_query()  # 查询之后重新算分在进行排序
 
     # range_query()  # 数值范围查询, 不进行打分
     # date_query()  # 日期范围查询, 不进行打分

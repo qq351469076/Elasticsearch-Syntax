@@ -62,3 +62,6 @@ if __name__ == "__main__":
     es_create_index_template()  # 创建Index模板
 
     add_index()  # 创建一条索引
+
+    # 创建搜索模板   ---> 解耦开发
+    # 索引别名   ---> 方便零停机维护
